@@ -1,3 +1,16 @@
+#!/usr/bin/env just --justfile
+
+# How to call the current just executable. Note that just_executable() may have `\` in Windows paths, so we need to quote it.
+just := quote(just_executable())
+
+# if running in CI, treat warnings as errors by setting RUSTFLAGS and RUSTDOCFLAGS to '-D warnings' unless they are already set
+# Use `CI=true just ci-test` to run the same tests as in GitHub CI.
+# Use `just env-info` to see the current values of RUSTFLAGS and RUSTDOCFLAGS
+ci_mode := if env('CI', '') != '' {'1'} else {''}
+export RUSTFLAGS := env('RUSTFLAGS', if ci_mode == '1' {'-D warnings'} else {''})
+export RUSTDOCFLAGS := env('RUSTDOCFLAGS', if ci_mode == '1' {'-D warnings'} else {''})
+export RUST_BACKTRACE := env('RUST_BACKTRACE', if ci_mode == '1' {'1'} else {'0'})
+
 ############################################
 # Just commands for Kellnr
 #
@@ -12,11 +25,25 @@
 ##########################################
 
 @_default:
-    {{just_executable()}} --list
+    {{just}} --list
 
+# Print environment info
+env-info:
+    @echo "Running {{if ci_mode == '1' {'in CI mode'} else {'in dev mode'} }} on {{os()}} / {{arch()}}"
+    @echo "PWD $(pwd)"
+    {{just}} --version
+    rustc --version
+    cargo --version
+    rustup --version
+    @echo "RUSTFLAGS='$RUSTFLAGS'"
+    @echo "RUSTDOCFLAGS='$RUSTDOCFLAGS'"
+    @echo "RUST_BACKTRACE='$RUST_BACKTRACE'"
+
+# Quick compile without building a binary
 check:
 	cargo check
 
+# Build the project
 build:
 	cargo build --features vendored-openssl
 
@@ -29,18 +56,21 @@ clippy:
 run: npm-build build
 	cargo run
 
-
-test: npm-build # Run all tests which do NOT require Docker
+# Run all tests which do NOT require Docker
+test: npm-build
 	cargo nextest run --workspace -E 'not test(~postgres_)'
 
-test-smoke: # Run the smoke tests which require Docker
+# Run the smoke tests which require Docker
+test-smoke:
 	{{test_smoke}}
 
-test-pgdb: npm-build # Run Postgresql integration tests which require Docker
+# Run Postgresql integration tests which require Docker
+test-pgdb: npm-build
 	{{test_pgdb}}
 
 test-all: test test-pgdb test-smoke
 
+# Clean all build artifacts
 clean:
 	cargo clean
 
